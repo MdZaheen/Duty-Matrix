@@ -23,6 +23,16 @@ const ROOM_ORDER = [
   { number: '512', capacity: 40 },
 ];
 
+// Fisher-Yates shuffle algorithm
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
 export async function POST(req: Request) {
   try {
     await dbConnect();
@@ -31,6 +41,17 @@ export async function POST(req: Request) {
     if (!examDate || !examTime || !scheduleId || (!subject1 && !subject2)) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
+
+    // Clear previous allocations for this schedule and subject(s)
+    const deleteQuery: any = { schedule: scheduleId };
+    if (subject1 && subject2) {
+      deleteQuery['subject'] = { $in: [subject1, subject2] };
+    } else if (subject1) {
+      deleteQuery['subject'] = subject1;
+    } else if (subject2) {
+      deleteQuery['subject'] = subject2;
+    }
+    await StudentAllocation.deleteMany(deleteQuery);
 
     // Get subject and semester info
     let sem1 = null, sem2 = null;
@@ -45,16 +66,21 @@ export async function POST(req: Request) {
       sem2 = subj2.semester;
     }
 
-    // Fetch students for selected semesters only
-    let queue1 = subject1 ? await Student.find({ semester: sem1 }) : [];
-    let queue2 = subject2 ? await Student.find({ semester: sem2 }) : [];
+    // Fetch students for selected semesters only and sort by USN
+    let queue1 = subject1 ? await Student.find({ semester: sem1 }).sort({ usn: 1 }) : [];
+    let queue2 = subject2 ? await Student.find({ semester: sem2 }).sort({ usn: 1 }) : [];
+
     let totalAllocated = 0;
     let roomAllocations = [];
 
-    for (const roomInfo of ROOM_ORDER) {
+    // Shuffle room order
+    const shuffledRooms = shuffleArray(ROOM_ORDER);
+
+    for (const roomInfo of shuffledRooms) {
       if (queue1.length === 0 && queue2.length === 0) break;
       const room = await Room.findOne({ number: roomInfo.number });
       if (!room) continue;
+      await StudentAllocation.deleteMany({ room: room._id, schedule: scheduleId });
       let finalCap1 = 0, finalCap2 = 0;
       if (subject1 && subject2 && queue1.length > 0 && queue2.length > 0) {
         // Split capacity between both groups

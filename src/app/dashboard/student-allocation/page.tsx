@@ -106,6 +106,47 @@ export default function StudentAllocation() {
           </p>
         </div>
       </div>
+
+      {/* Prerequisites */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h2 className="text-lg font-semibold text-gray-700 mb-4">Prerequisites</h2>
+        <div className="space-y-4">
+          <div className="flex items-center">
+            <div className="w-8 h-8 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mr-3">1</div>
+            <div>
+              <p className="font-medium">Add students to the system</p>
+              <p className="text-sm text-gray-500">Make sure you have added all students with their semester and section information</p>
+              <Link href="/dashboard/students" className="text-sm text-purple-600 hover:underline mt-1 inline-block">Manage Students &rarr;</Link>
+            </div>
+          </div>
+          <div className="flex items-center">
+            <div className="w-8 h-8 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mr-3">2</div>
+            <div>
+              <p className="font-medium">Add subject details</p>
+              <p className="text-sm text-gray-500">Register all subjects for the examination</p>
+              <Link href="/dashboard/subjects" className="text-sm text-purple-600 hover:underline mt-1 inline-block">Manage Subjects &rarr;</Link>
+            </div>
+          </div>
+          <div className="flex items-center">
+            <div className="w-8 h-8 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mr-3">3</div>
+            <div>
+              <p className="font-medium">Add room information</p>
+              <p className="text-sm text-gray-500">Ensure all examination rooms are registered</p>
+              <Link href="/dashboard/rooms" className="text-sm text-purple-600 hover:underline mt-1 inline-block">Manage Rooms &rarr;</Link>
+            </div>
+          </div>
+          <div className="flex items-center">
+            <div className="w-8 h-8 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mr-3">4</div>
+            <div>
+              <p className="font-medium">Set exam schedules</p>
+              <p className="text-sm text-gray-500">Create schedules for exam dates and shifts</p>
+              <Link href="/dashboard/schedules" className="text-sm text-purple-600 hover:underline mt-1 inline-block">Manage Schedules &rarr;</Link>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Room Allocation Form */}
       <div className="bg-white rounded-lg shadow p-6">
         <h2 className="text-lg font-semibold text-gray-700 mb-4">Room Allocation Details</h2>
         <div className="mb-6">
@@ -158,6 +199,9 @@ export default function StudentAllocation() {
             </select>
           </div>
         </div>
+        <div className="mb-6 text-sm text-gray-500">
+          If you select only one group, the entire room will be used for that group.
+        </div>
         <button
           onClick={handleAllocate}
           disabled={isLoading || !selectedSchedule || (!subject1 && !subject2)}
@@ -180,8 +224,24 @@ export default function StudentAllocation() {
               <div>Total Students: <span className="font-bold">{result.totalAllocatedStudents}</span></div>
               <div>Rooms Used: <span className="font-bold">{result.roomsUsed}</span></div>
             </div>
+            <div className="mt-4">
+              <Link href="/dashboard/reports/student-seating" className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700">View Student Seating Report &rarr;</Link>
+            </div>
           </div>
         )}
+      </div>
+
+      {/* How it works */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h2 className="text-lg font-semibold text-gray-700 mb-4">How It Works</h2>
+        <ol className="list-decimal list-inside space-y-2 ml-4 text-gray-700">
+          <li>Select the exam schedule and subjects for one or two groups/semesters.</li>
+          <li>The system fetches all students for the selected groups/semesters.</li>
+          <li>Each room is split: first half of seats for the first group, second half for the second group (if both are selected).</li>
+          <li>If the room capacity is odd, the extra seat goes to the second group.</li>
+          <li>Students are assigned seat numbers and rooms automatically.</li>
+          <li>You can view the detailed seating report after allocation.</li>
+        </ol>
       </div>
     </div>
   );
