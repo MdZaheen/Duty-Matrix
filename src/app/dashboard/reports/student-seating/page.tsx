@@ -54,6 +54,9 @@ export default function StudentSeatingReport() {
   const [rooms, setRooms] = useState<RoomInfo[]>([]);
   const [selectedSchedule, setSelectedSchedule] = useState(searchParams.get('scheduleId') || '');
   const [groupedAllocations, setGroupedAllocations] = useState<Record<string, StudentAllocation[]>>({});
+  const [showExportOptions, setShowExportOptions] = useState(false);
+  const [selectedSemester, setSelectedSemester] = useState<string>('');
+  const [assessmentNumber, setAssessmentNumber] = useState<string>('2');
 
   useEffect(() => {
     const fetchOptions = async () => {
@@ -150,9 +153,50 @@ export default function StudentSeatingReport() {
     return room ? room.capacity : 0;
   };
 
+  // Get unique semesters from current allocations
+  const getAvailableSemesters = () => {
+    const semesters = new Set<number>();
+    allocations.forEach(allocation => {
+      if (allocation.subject && allocation.subject.semester) {
+        semesters.add(allocation.subject.semester);
+      }
+    });
+    return Array.from(semesters).sort((a, b) => a - b);
+  };
+
+  // Handle export functionality
+  const handleExport = (exportFormat: string = 'cia') => {
+    // Build the URL with format and semester parameters
+    let url = '/api/export-student-allocation';
+    const params = new URLSearchParams();
+    
+    // Set export format (cia or summary)
+    params.append('format', exportFormat);
+    
+    // Add CIA assessment number
+    params.append('assessment', assessmentNumber);
+    
+    // Add semester filter if selected
+    if (selectedSemester) {
+      params.append('semester', selectedSemester);
+    }
+    
+    // Add schedule filter if selected
+    if (selectedSchedule) {
+      params.append('scheduleId', selectedSchedule);
+    }
+    
+    // Add params to URL
+    url = `${url}?${params.toString()}`;
+    
+    // Redirect to the export API endpoint
+    window.location.href = url;
+  };
+
   // Summary
   const totalRoomsUsed = Object.keys(groupedAllocations).length;
   const totalStudents = allocations.length;
+  const availableSemesters = getAvailableSemesters();
 
   return (
     <div className="space-y-6">
@@ -164,6 +208,80 @@ export default function StudentSeatingReport() {
           </p>
         </div>
         <div className="flex space-x-3">
+          <div className="relative inline-block text-left">
+            <button
+              onClick={() => setShowExportOptions(!showExportOptions)}
+              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+            >
+              Export CIA Format
+            </button>
+            
+            {showExportOptions && (
+              <div className="absolute right-0 mt-2 w-60 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 p-3 z-10">
+                <div className="mb-3">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    CIA Assessment Number
+                  </label>
+                  <select
+                    value={assessmentNumber}
+                    onChange={(e) => setAssessmentNumber(e.target.value)}
+                    className="w-full rounded-md border border-gray-300 shadow-sm px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+                  >
+                    <option value="1">CIA-1</option>
+                    <option value="2">CIA-2</option>
+                    <option value="3">CIA-3</option>
+                  </select>
+                </div>
+                
+                <div className="mb-3">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Semester Filter (Optional)
+                  </label>
+                  <select
+                    value={selectedSemester}
+                    onChange={(e) => setSelectedSemester(e.target.value)}
+                    className="w-full rounded-md border border-gray-300 shadow-sm px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+                  >
+                    <option value="">All Semesters</option>
+                    {availableSemesters.map((sem) => (
+                      <option key={sem} value={sem.toString()}>
+                        Semester {sem}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div className="space-y-2">
+                  <button
+                    onClick={() => {
+                      handleExport('summary');
+                      setShowExportOptions(false);
+                    }}
+                    className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    📋 Export Summary (USN Ranges)
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      handleExport('cia');
+                      setShowExportOptions(false);
+                    }}
+                    className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+                  >
+                    📝 Export Detailed (Individual Students)
+                  </button>
+                </div>
+                
+                {availableSemesters.length === 0 && (
+                  <p className="text-sm text-gray-500 mb-2">
+                    No data available to export. Please select a schedule first.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+          
           <Link 
             href="/dashboard/student-allocation" 
             className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"

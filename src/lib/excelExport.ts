@@ -759,6 +759,790 @@ function columnToLetter(columnIndex: number): string {
 }
 
 /**
+ * Export Student Seating Arrangement in CIA format
+ * Matches the professor duty CIA format with college header and proper styling
+ * 
+ * @param semester The semester to filter students (optional - if not provided, exports all)
+ * @param scheduleId Optional schedule ID to filter by specific exam schedule
+ * @param assessmentNumber The CIA assessment number (1, 2, or 3) - defaults to '2'
+ */
+export async function exportStudentSeatingCIAFormat(semester?: number, scheduleId?: string, assessmentNumber: string = '2'): Promise<any> {
+  await dbConnect();
+  
+  // Create a new workbook and worksheet
+  const workbook = new Excel.Workbook();
+  
+  // Set workbook properties
+  workbook.creator = 'Duty Allocation System';
+  workbook.lastModifiedBy = 'API';
+  workbook.created = new Date();
+  workbook.modified = new Date();
+  
+  const worksheet = workbook.addWorksheet('Student Seating Arrangement', {
+    pageSetup: {
+      paperSize: 9, // A4
+      orientation: 'landscape',
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      margins: {
+        left: 0.5, right: 0.5,
+        top: 0.5, bottom: 0.5,
+        header: 0.3, footer: 0.3
+      }
+    }
+  });
+  
+  try {
+    // Build query for student allocations
+    const query: any = {};
+    if (scheduleId) {
+      query.schedule = scheduleId;
+    }
+    
+    // Get all allocations with populated fields
+    let allocations = await StudentAllocation.find(query)
+      .populate('student')
+      .populate('room')
+      .populate('schedule')
+      .populate('subject')
+      .sort({ 'room.number': 1, seatNumber: 1 })
+      .lean();
+    
+    // Filter by semester if specified
+    if (semester) {
+      allocations = allocations.filter((allocation: any) => 
+        allocation.subject && allocation.subject.semester === semester
+      );
+    }
+    
+    console.log(`Generating student seating report with ${allocations.length} allocations for semester: ${semester || 'all'}`);
+    
+    // Determine semester type for display
+    let semesterType = 'Even'; // Default
+    const currentYear = new Date().getFullYear();
+    const academicYear = `${currentYear}-${currentYear + 1}`;
+    
+    if (semester) {
+      semesterType = semester % 2 === 0 ? 'Even' : 'Odd';
+    }
+    
+    // Add college logo
+    const logoCell = worksheet.getCell('A1');
+    logoCell.alignment = {
+      horizontal: 'center',
+      vertical: 'middle'
+    };
+    
+    // Try to add the college logo
+    try {
+      const fs = require('fs');
+      const logoPath = path.join(process.cwd(), 'public', 'images', 'logo.png');
+      
+      if (fs.existsSync(logoPath)) {
+        const logoImage = workbook.addImage({
+          filename: logoPath,
+          extension: 'png',
+        });
+        worksheet.addImage(logoImage, {
+          tl: { col: 0, row: 0 },
+          ext: { width: 80, height: 80 },
+          editAs: 'oneCell'
+        });
+      } else {
+        console.log('College logo not found at path:', logoPath);
+        logoCell.value = 'LOGO';
+        logoCell.font = {
+          name: 'Arial',
+          bold: true,
+          size: 12,
+        };
+      }
+    } catch (error) {
+      console.warn('Error adding college logo, using placeholder:', error);
+      logoCell.value = 'LOGO';
+      logoCell.font = {
+        name: 'Arial',
+        bold: true,
+        size: 12,
+      };
+    }
+    
+    // Add college name header
+    worksheet.mergeCells('B1:L1');
+    const collegeCell = worksheet.getCell('B1');
+    collegeCell.value = 'DAYANANDA SAGAR COLLEGE OF ENGINEERING';
+    collegeCell.font = {
+      name: 'Arial',
+      bold: true,
+      size: 14,
+    };
+    collegeCell.alignment = {
+      horizontal: 'center',
+      vertical: 'middle'
+    };
+    
+    // Add college address
+    worksheet.mergeCells('B2:L2');
+    const addressCell = worksheet.getCell('B2');
+    addressCell.value = '(An Autonomous Institute affiliated to Visvesvaraya Technological University (VTU), Belagavi,';
+    addressCell.font = {
+      name: 'Arial',
+      size: 8,
+    };
+    addressCell.alignment = {
+      horizontal: 'center',
+      vertical: 'middle'
+    };
+    
+    worksheet.mergeCells('B3:L3');
+    const address2Cell = worksheet.getCell('B3');
+    address2Cell.value = 'Approved by AICTE and UGC, Accredited by NBA (Tier 1: 2023-2025), NAAC "A+" Certified Institution)';
+    address2Cell.font = {
+      name: 'Arial',
+      size: 8,
+    };
+    address2Cell.alignment = {
+      horizontal: 'center',
+      vertical: 'middle'
+    };
+    
+    worksheet.mergeCells('B4:L4');
+    const address3Cell = worksheet.getCell('B4');
+    address3Cell.value = 'Shavige Malleshwara Hills, Kumaraswamy Layout, Bengaluru - 560 111, India';
+    address3Cell.font = {
+      name: 'Arial',
+      size: 8,
+    };
+    address3Cell.alignment = {
+      horizontal: 'center',
+      vertical: 'middle'
+    };
+    
+    // Add department name
+    worksheet.mergeCells('A6:L6');
+    const deptCell = worksheet.getCell('A6');
+    deptCell.value = 'Department of Information Science and Engineering';
+    deptCell.font = {
+      name: 'Arial',
+      bold: true,
+      size: 12,
+    };
+    deptCell.alignment = {
+      horizontal: 'center',
+      vertical: 'middle'
+    };
+    
+    // Add accreditation line
+    worksheet.mergeCells('A7:L7');
+    const accreditationCell = worksheet.getCell('A7');
+    accreditationCell.value = '(Accredited by NBA Tier 1: 2022-2025)';
+    accreditationCell.font = {
+      name: 'Arial',
+      size: 10,
+      italic: true
+    };
+    accreditationCell.alignment = {
+      horizontal: 'center',
+      vertical: 'middle'
+    };
+    
+    // Add date
+    worksheet.mergeCells('J8:L8');
+    const dateCell = worksheet.getCell('J8');
+    dateCell.value = `Date: ${format(new Date(), 'dd/MM/yyyy')}`;
+    dateCell.font = {
+      name: 'Arial',
+      size: 10,
+    };
+    dateCell.alignment = {
+      horizontal: 'right',
+      vertical: 'middle'
+    };
+    
+    // Add title
+    worksheet.mergeCells('A9:L9');
+    const titleCell = worksheet.getCell('A9');
+    titleCell.value = `Student Seating Arrangement Report - CIA-${assessmentNumber}`;
+    titleCell.font = {
+      name: 'Arial',
+      bold: true,
+      underline: true,
+      size: 12,
+    };
+    titleCell.alignment = {
+      horizontal: 'center',
+      vertical: 'middle'
+    };
+    
+    // Add subtitle
+    worksheet.mergeCells('A10:L10');
+    const subtitleCell = worksheet.getCell('A10');
+    const semesterText = semester ? `Semester ${semester} (${semesterType})` : 'All Semesters';
+    subtitleCell.value = `${semesterText} - ${academicYear}`;
+    subtitleCell.font = {
+      name: 'Arial',
+      bold: true,
+      size: 12,
+    };
+    subtitleCell.alignment = {
+      horizontal: 'center',
+      vertical: 'middle'
+    };
+    
+    // Starting row for the data
+    let currentRow = 12;
+    
+    // Define columns for student data
+    const columns = [
+      { header: 'Room No.', key: 'roomNumber', width: 12 },
+      { header: 'Seat No.', key: 'seatNumber', width: 10 },
+      { header: 'USN', key: 'usn', width: 18 },
+      { header: 'Student Name', key: 'name', width: 25 },
+      { header: 'Section', key: 'section', width: 10 },
+      { header: 'Semester', key: 'semester', width: 10 },
+      { header: 'Subject Code', key: 'subjectCode', width: 15 },
+      { header: 'Subject Name', key: 'subjectName', width: 25 },
+      { header: 'CIA-1', key: 'cia1', width: 8 },
+      { header: 'CIA-2', key: 'cia2', width: 8 },
+      { header: 'CIA-3', key: 'cia3', width: 8 },
+      { header: 'Invigilator Sign', key: 'signature', width: 18 }
+    ];
+    
+    // Set column widths
+    columns.forEach((col, index) => {
+      worksheet.getColumn(index + 1).width = col.width;
+    });
+    
+    // Add header row
+    const headerRow = worksheet.addRow(columns.map(col => col.header));
+    headerRow.height = 24;
+    headerRow.font = { 
+      bold: true, 
+      size: 12, 
+      color: { argb: '000000' } 
+    };
+    headerRow.alignment = { 
+      horizontal: 'center', 
+      vertical: 'middle', 
+      wrapText: true 
+    };
+    
+    headerRow.eachCell((cell) => {
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: COLORS.HEADER_BG.slice(2) }
+      };
+      cell.border = {
+        top: { style: 'thin', color: { argb: COLORS.BORDER.slice(2) } },
+        left: { style: 'thin', color: { argb: COLORS.BORDER.slice(2) } },
+        bottom: { style: 'thin', color: { argb: COLORS.BORDER.slice(2) } },
+        right: { style: 'thin', color: { argb: COLORS.BORDER.slice(2) } }
+      };
+    });
+    
+    if (allocations.length === 0) {
+      const noDataRow = worksheet.addRow([
+        'No students allocated', '', '', '', '', '', '', '', '', '', '', ''
+      ]);
+      noDataRow.font = { italic: true };
+      noDataRow.alignment = { horizontal: 'center' };
+    } else {
+      // Group allocations by room
+      const allocationsByRoom: Record<string, any[]> = {};
+      
+      allocations.forEach(allocation => {
+        const typedAllocation = allocation as any;
+        const roomNumber = typedAllocation.room.number;
+        
+        if (!allocationsByRoom[roomNumber]) {
+          allocationsByRoom[roomNumber] = [];
+        }
+        
+        allocationsByRoom[roomNumber].push(typedAllocation);
+      });
+      
+      // Process each room group
+      const sortedRooms = Object.keys(allocationsByRoom).sort((a, b) => {
+        const numA = parseInt(a, 10);
+        const numB = parseInt(b, 10);
+        if (isNaN(numA) || isNaN(numB)) {
+          return a.localeCompare(b);
+        }
+        return numA - numB;
+      });
+      
+      let rowCount = 0;
+      
+      for (const roomNumber of sortedRooms) {
+        const roomAllocations = allocationsByRoom[roomNumber];
+        
+        // Sort by seat number within the room
+        roomAllocations.sort((a, b) => a.seatNumber - b.seatNumber);
+        
+        // Add each allocation as a row
+        roomAllocations.forEach((allocation, index) => {
+          const studentRow = worksheet.addRow([
+            allocation.room.number,
+            allocation.seatNumber,
+            allocation.student.usn,
+            allocation.student.name,
+            allocation.student.section,
+            allocation.subject.semester,
+            allocation.subject.code,
+            allocation.subject.name,
+            allocation.ciaMarks?.cia1 || '',
+            allocation.ciaMarks?.cia2 || '',
+            allocation.ciaMarks?.cia3 || '',
+            '' // Empty signature cell
+          ]);
+          rowCount++;
+          
+          // Add alternating row colors
+          if (rowCount % 2 === 0) {
+            studentRow.eachCell((cell) => {
+              if (cell.value !== '' || cell.col <= columns.length) {
+                cell.fill = {
+                  type: 'pattern',
+                  pattern: 'solid',
+                  fgColor: { argb: COLORS.ALT_ROW_BG.slice(2) }
+                };
+              }
+            });
+          }
+          
+          // Make signature cell stand out
+          const signatureCell = studentRow.getCell(12);
+          signatureCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: COLORS.SIGNATURE_BG.slice(2) }
+          };
+          
+          // Add borders to every cell
+          studentRow.eachCell((cell) => {
+            cell.border = {
+              top: { style: 'thin', color: { argb: COLORS.BORDER.slice(2) } },
+              left: { style: 'thin', color: { argb: COLORS.BORDER.slice(2) } },
+              bottom: { style: 'thin', color: { argb: COLORS.BORDER.slice(2) } },
+              right: { style: 'thin', color: { argb: COLORS.BORDER.slice(2) } }
+            };
+            
+            // Center alignment for most cells, left for names and USN
+            if (Number(cell.col) === 3 || Number(cell.col) === 4 || Number(cell.col) === 8) {
+              cell.alignment = { horizontal: 'left', vertical: 'middle' };
+            } else {
+              cell.alignment = { horizontal: 'center', vertical: 'middle' };
+            }
+          });
+        });
+      }
+      
+      // Add summary statistics
+      worksheet.addRow([]);
+      const summaryRow = worksheet.addRow([
+        'Summary:',
+        '',
+        `Total Students: ${allocations.length}`,
+        `Total Rooms: ${sortedRooms.length}`,
+        '',
+        semester ? `Semester: ${semester}` : 'All Semesters',
+        '', '', '', '', '', ''
+      ]);
+      
+      summaryRow.font = { bold: true };
+      summaryRow.eachCell((cell) => {
+        if (Number(cell.col) <= 6) {
+          cell.alignment = { horizontal: 'left', vertical: 'middle' };
+        }
+      });
+    }
+    
+    // Add footer signature area
+    worksheet.addRow([]);
+    worksheet.addRow([]);
+    
+    // Add test coordinators area
+    const coordRow = worksheet.addRow([
+      'Test Coordinators', '', '', '', '', '', '', '', '', '', '', 'Dean Academics & HOD-ISE'
+    ]);
+    coordRow.font = { bold: true };
+    
+    // Add coordinator names
+    worksheet.addRow([]);
+    worksheet.addRow([
+      'Dr. Madhura J', '', '', '', '', '', '', '', '', '', '', 'Dr. Annapurna P Patil'
+    ]);
+    
+    worksheet.addRow([
+      'Prof. Bindu Bhargavi SM', '', '', '', '', '', '', '', '', '', '', ''
+    ]);
+    
+    // Add footer
+    worksheet.addRow([]);
+    const footerRow = worksheet.addRow(['', '', '', '', '', '', '', '', '', '', '', '']);
+    const footerCell = footerRow.getCell(1);
+    footerCell.value = `Generated by: Duty Allocation System - ${format(new Date(), 'dd-MM-yyyy HH:mm')}`;
+    footerCell.font = { italic: true, size: 10 };
+    
+    // Export the workbook to a buffer
+    return await workbook.xlsx.writeBuffer();
+    
+  } catch (error) {
+    console.error('Error generating student seating CIA format report:', error);
+    throw error;
+  }
+}
+
+/**
+ * Export Student Seating Summary in CIA format (USN Range format)
+ * Shows grouped USN ranges by semester and section with room assignments
+ * 
+ * @param semester The semester to filter students (optional - if not provided, exports all)
+ * @param scheduleId Optional schedule ID to filter by specific exam schedule
+ * @param assessmentNumber The CIA assessment number (1, 2, or 3) - defaults to '2'
+ */
+export async function exportStudentSeatingSummaryCIAFormat(semester?: number, scheduleId?: string, assessmentNumber: string = '2'): Promise<any> {
+  await dbConnect();
+  
+  // Create a new workbook and worksheet
+  const workbook = new Excel.Workbook();
+  
+  // Set workbook properties
+  workbook.creator = 'Duty Allocation System';
+  workbook.lastModifiedBy = 'API';
+  workbook.created = new Date();
+  workbook.modified = new Date();
+  
+  const worksheet = workbook.addWorksheet('Student Seating Summary', {
+    pageSetup: {
+      paperSize: 9, // A4
+      orientation: 'portrait',
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      margins: {
+        left: 0.5, right: 0.5,
+        top: 0.5, bottom: 0.5,
+        header: 0.3, footer: 0.3
+      }
+    }
+  });
+  
+  try {
+    // Build query for student allocations
+    const query: any = {};
+    if (scheduleId) {
+      query.schedule = scheduleId;
+    }
+    
+    // Get all allocations with populated fields
+    let allocations = await StudentAllocation.find(query)
+      .populate('student')
+      .populate('room')
+      .populate('schedule')
+      .populate('subject')
+      .sort({ 'subject.semester': 1, 'student.section': 1, 'student.usn': 1 })
+      .lean();
+    
+    // Filter by semester if specified
+    if (semester) {
+      allocations = allocations.filter((allocation: any) => 
+        allocation.subject && allocation.subject.semester === semester
+      );
+    }
+    
+    console.log(`Generating student seating summary with ${allocations.length} allocations for semester: ${semester || 'all'}`);
+    
+    // Determine semester type and academic year
+    let semesterType = 'Odd'; // Default
+    const currentYear = new Date().getFullYear();
+    const academicYear = `${currentYear}-${(currentYear + 1).toString().slice(-2)}`;
+    
+    if (semester) {
+      semesterType = semester % 2 === 0 ? 'Even' : 'Odd';
+    }
+    
+    // Add college logo
+    const logoCell = worksheet.getCell('A1');
+    logoCell.alignment = {
+      horizontal: 'center',
+      vertical: 'middle'
+    };
+    
+    // Try to add the college logo
+    try {
+      const fs = require('fs');
+      const logoPath = path.join(process.cwd(), 'public', 'images', 'logo.png');
+      
+      if (fs.existsSync(logoPath)) {
+        const logoImage = workbook.addImage({
+          filename: logoPath,
+          extension: 'png',
+        });
+        worksheet.addImage(logoImage, {
+          tl: { col: 0, row: 0 },
+          ext: { width: 80, height: 80 },
+          editAs: 'oneCell'
+        });
+      } else {
+        console.log('College logo not found at path:', logoPath);
+        logoCell.value = 'LOGO';
+        logoCell.font = { name: 'Arial', bold: true, size: 12 };
+      }
+    } catch (error) {
+      console.warn('Error adding college logo, using placeholder:', error);
+      logoCell.value = 'LOGO';
+      logoCell.font = { name: 'Arial', bold: true, size: 12 };
+    }
+    
+    // Add college header
+    worksheet.mergeCells('B1:F1');
+    const collegeCell = worksheet.getCell('B1');
+    collegeCell.value = 'DAYANANDA SAGAR COLLEGE OF ENGINEERING';
+    collegeCell.font = { name: 'Arial', bold: true, size: 14 };
+    collegeCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    
+    // Add college address line 1
+    worksheet.mergeCells('B2:F2');
+    const addressCell1 = worksheet.getCell('B2');
+    addressCell1.value = '(An Autonomous Institute affiliated to Visvesvaraya Technological University (VTU), Belagavi,';
+    addressCell1.font = { name: 'Arial', size: 8 };
+    addressCell1.alignment = { horizontal: 'center', vertical: 'middle' };
+    
+    // Add college address line 2
+    worksheet.mergeCells('B3:F3');
+    const addressCell2 = worksheet.getCell('B3');
+    addressCell2.value = 'Approved by AICTE and UGC, Accredited by NBA (Tier 1: 2023-2025), NAAC "A+" Certified Institution)';
+    addressCell2.font = { name: 'Arial', size: 8 };
+    addressCell2.alignment = { horizontal: 'center', vertical: 'middle' };
+    
+    // Add department name
+    worksheet.mergeCells('A5:F5');
+    const deptCell = worksheet.getCell('A5');
+    deptCell.value = 'Department of Information Science and Engineering';
+    deptCell.font = { name: 'Arial', bold: true, size: 12 };
+    deptCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    
+    // Add accreditation
+    worksheet.mergeCells('A6:F6');
+    const accreditationCell = worksheet.getCell('A6');
+    accreditationCell.value = '(Accredited by NBA Tier 1: 2025-2028)';
+    accreditationCell.font = { name: 'Arial', size: 10, italic: true };
+    accreditationCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    
+    // Add title
+    worksheet.mergeCells('A8:F8');
+    const titleCell = worksheet.getCell('A8');
+    const semesterText = semester ? `${semester}` : 'All';
+    const assessmentMap: Record<string, string> = { '1': 'I', '2': 'II', '3': 'III' };
+    const romanAssessment = assessmentMap[assessmentNumber] || assessmentNumber;
+    titleCell.value = `UG Continuous Internal Assessment ${romanAssessment} (${semesterType.toUpperCase()} Sem ${academicYear})`;
+    titleCell.font = { name: 'Arial', bold: true, size: 12 };
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    
+    // Add subtitle
+    worksheet.mergeCells('A9:F9');
+    const subtitleCell = worksheet.getCell('A9');
+    subtitleCell.value = `Student Seating Allotment (${semesterText}${semester ? getSuperscript(semester) : ''} Semester)`;
+    subtitleCell.font = { name: 'Arial', bold: true, size: 11 };
+    subtitleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    
+    // Starting row for the table
+    let currentRow = 11;
+    
+    // Set column widths
+    worksheet.getColumn(1).width = 8;   // Sem
+    worksheet.getColumn(2).width = 12;  // Section
+    worksheet.getColumn(3).width = 35;  // USN Range
+    worksheet.getColumn(4).width = 8;   // Count
+    worksheet.getColumn(5).width = 12;  // Room No.
+    
+    // Add table headers
+    const headerRow = worksheet.addRow(['Sem', 'Section', 'USN Range', 'Count', 'Room No.']);
+    headerRow.height = 20;
+    headerRow.font = { bold: true, size: 11 };
+    headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+    
+    // Style header row
+    headerRow.eachCell((cell) => {
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' }
+      };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FF000000' } },
+        left: { style: 'thin', color: { argb: 'FF000000' } },
+        bottom: { style: 'thin', color: { argb: 'FF000000' } },
+        right: { style: 'thin', color: { argb: 'FF000000' } }
+      };
+    });
+    
+    if (allocations.length === 0) {
+      const noDataRow = worksheet.addRow(['', '', 'No students allocated', '', '']);
+      noDataRow.font = { italic: true };
+      noDataRow.getCell(3).alignment = { horizontal: 'center' };
+    } else {
+      // Group allocations by semester and section
+      const groupedBySemesterSection: Record<string, any[]> = {};
+      
+      allocations.forEach((allocation: any) => {
+        const sem = allocation.subject.semester;
+        const section = allocation.student.section;
+        const key = `${sem}_${section}`;
+        
+        if (!groupedBySemesterSection[key]) {
+          groupedBySemesterSection[key] = [];
+        }
+        
+        groupedBySemesterSection[key].push(allocation);
+      });
+      
+      // Process each semester-section group
+      const sortedKeys = Object.keys(groupedBySemesterSection).sort();
+      
+      for (const key of sortedKeys) {
+        const [sem, section] = key.split('_');
+        const sectionAllocations = groupedBySemesterSection[key];
+        
+        // Sort by USN
+        sectionAllocations.sort((a, b) => a.student.usn.localeCompare(b.student.usn));
+        
+        // Group by room for this section
+        const roomGroups: Record<string, any[]> = {};
+        sectionAllocations.forEach(allocation => {
+          const roomKey = allocation.room.number;
+          if (!roomGroups[roomKey]) {
+            roomGroups[roomKey] = [];
+          }
+          roomGroups[roomKey].push(allocation);
+        });
+        
+        // Create USN ranges for each room
+        const sortedRooms = Object.keys(roomGroups).sort((a, b) => {
+          const numA = parseInt(a.replace(/\D/g, ''), 10);
+          const numB = parseInt(b.replace(/\D/g, ''), 10);
+          return numA - numB;
+        });
+        
+        let isFirstRoomForSection = true;
+        
+        for (const roomNumber of sortedRooms) {
+          const roomStudents = roomGroups[roomNumber];
+          roomStudents.sort((a, b) => a.student.usn.localeCompare(b.student.usn));
+          
+          // Create USN range
+          let usnRange = '';
+          if (roomStudents.length === 1) {
+            usnRange = roomStudents[0].student.usn;
+          } else {
+            // Group consecutive USNs
+            const usnGroups = [];
+            let currentGroup = [roomStudents[0]];
+            
+            for (let i = 1; i < roomStudents.length; i++) {
+              const currentUSN = roomStudents[i].student.usn;
+              const lastUSN = currentGroup[currentGroup.length - 1].student.usn;
+              
+              // Check if USNs are consecutive (assuming format like 1DS23IS001)
+              const currentNum = parseInt(currentUSN.slice(-3));
+              const lastNum = parseInt(lastUSN.slice(-3));
+              
+              if (currentNum === lastNum + 1 && currentGroup.length < 20) {
+                currentGroup.push(roomStudents[i]);
+              } else {
+                usnGroups.push(currentGroup);
+                currentGroup = [roomStudents[i]];
+              }
+            }
+            usnGroups.push(currentGroup);
+            
+            // Format USN ranges
+            const rangeStrings = usnGroups.map(group => {
+              if (group.length === 1) {
+                return group[0].student.usn;
+              } else {
+                return `${group[0].student.usn} – ${group[group.length - 1].student.usn}`;
+              }
+            });
+            
+            usnRange = rangeStrings.join('\n');
+          }
+          
+          // Add row to table
+          const dataRow = worksheet.addRow([
+            isFirstRoomForSection ? sem : '', // Show semester only for first row of section
+            isFirstRoomForSection ? section : '', // Show section only for first row of section
+            usnRange,
+            roomStudents.length,
+            roomNumber
+          ]);
+          
+          // Style the row
+          dataRow.eachCell((cell, colNumber) => {
+            cell.border = {
+              top: { style: 'thin', color: { argb: 'FF000000' } },
+              left: { style: 'thin', color: { argb: 'FF000000' } },
+              bottom: { style: 'thin', color: { argb: 'FF000000' } },
+              right: { style: 'thin', color: { argb: 'FF000000' } }
+            };
+            
+            // Alignment
+            if (colNumber === 1 || colNumber === 2) {
+              cell.alignment = { horizontal: 'center', vertical: 'middle' };
+            } else if (colNumber === 3) {
+              cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+            } else {
+              cell.alignment = { horizontal: 'center', vertical: 'middle' };
+            }
+          });
+          
+          // Increase row height if there are multiple USN ranges
+          if (usnRange.includes('\n')) {
+            dataRow.height = 15 * (usnRange.split('\n').length);
+          }
+          
+          isFirstRoomForSection = false;
+        }
+      }
+    }
+    
+    // Add signature area
+    worksheet.addRow([]);
+    worksheet.addRow([]);
+    
+    // Test Coordinators
+    const coordRow = worksheet.addRow(['', '', 'Test Coordinators', '', 'Dean Academics & HoD-ISE']);
+    coordRow.font = { bold: true };
+    coordRow.getCell(3).alignment = { horizontal: 'left' };
+    coordRow.getCell(5).alignment = { horizontal: 'right' };
+    
+    worksheet.addRow([]);
+    
+    // Names
+    const nameRow1 = worksheet.addRow(['', '', '', '', 'Dr. Annapurna P.Patil']);
+    nameRow1.getCell(5).alignment = { horizontal: 'right' };
+    
+    // Export the workbook to a buffer
+    return await workbook.xlsx.writeBuffer();
+    
+  } catch (error) {
+    console.error('Error generating student seating summary CIA format report:', error);
+    throw error;
+  }
+}
+
+// Helper function to get superscript text
+function getSuperscript(num: number): string {
+  const superscripts: Record<number, string> = {
+    1: 'st', 2: 'nd', 3: 'rd', 4: 'th', 5: 'th', 6: 'th', 7: 'th', 8: 'th'
+  };
+  return superscripts[num] || 'th';
+}
+
+/**
  * Generate Faculty Duty Allotment Report in the format required for Dayananda Sagar College of Engineering
  * Produces a report that matches the specific CIA examination duty format
  * 
