@@ -25,14 +25,14 @@ export async function GET(req: NextRequest) {
     if (format === 'cia') {
       // Use the detailed CIA format for student seating
       const semesterNum = semester ? parseInt(semester, 10) : undefined;
-      buffer = await exportStudentSeatingCIAFormat(semesterNum, scheduleId, assessment);
+      buffer = await exportStudentSeatingCIAFormat(semesterNum, scheduleId ?? undefined, assessment);
       
       const semesterText = semesterNum ? `_semester_${semesterNum}` : '';
       filename = `student_seating_CIA-${assessment}${semesterText}.xlsx`;
     } else if (format === 'summary') {
       // Use the USN range summary format like in the image
       const semesterNum = semester ? parseInt(semester, 10) : undefined;
-      buffer = await exportStudentSeatingSummaryCIAFormat(semesterNum, scheduleId, assessment);
+      buffer = await exportStudentSeatingSummaryCIAFormat(semesterNum, scheduleId ?? undefined, assessment);
       
       const semesterText = semesterNum ? `_semester_${semesterNum}` : '';
       filename = `student_seating_summary_CIA-${assessment}${semesterText}.xlsx`;

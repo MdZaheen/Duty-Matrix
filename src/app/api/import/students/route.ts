@@ -3,13 +3,6 @@ import * as XLSX from 'xlsx';
 import dbConnect from '@/lib/db';
 import Student from '@/models/student';
 
-// Disable default body parsing to handle file upload manually
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
-
 interface StudentData {
   name: string;
   usn: string;
